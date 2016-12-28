@@ -42,19 +42,19 @@ shinyServer(function(input, output, session) {
   reac_data_train_transf <- callModule(filter_df_timeSeries, "data_training_org", reac_data_raw_transf, 
                                        reactive(input$date_range_train[1]), reactive(input$date_range_train[2]))
   ## testing sample in the chosen transformation
-  reac_data_test_transf <- callModule(filter_df_timeSeries, "data_testing_org", reac_data_raw_transf, 
+  reac_data_test_transf <- callModule(filter_df_timeSeries, "data_testing_transf", reac_data_raw_transf, 
                                       reactive(input$date_range_test[1]), reactive(input$date_range_test[2]))
   ##############################################################################################END Part A: REACTIVE data prepare###
   
   ################################################BEGIN Part B: Historical data view panel #############################################
   ### Source original data from UI inputs 
-  callModule(tab_DT_searchPage_serv, "tab_data_hist", reac_data_train_org, reactive("val"), tab_with_date=TRUE)
+  callModule(tab_DT_searchPage_serv, "tab_data_hist", reac_data_train_org, reactive(names(reac_data_train_org())), tab_with_date=FALSE)
   callModule(fig_ggplot_date_serv, "fig_data_hist", reac_data_train_org, reactive("val"), reactive(toupper(input$txt_dataId_2_source)))
   callModule(fig_histgram_density_serv, "fig_data_org_histgram", reac_data_train_org, "val")
   callModule(fig_acf_pacf_serv, "fig_acf_data_org", reactive(reac_data_train_org()$val))
   callModule(tab_simple_serv, "tab_data_org_stationary", reactive(TestsStationaryPval(reac_data_train_org()$val)))
   ### Source transformated data from UI inputs 
-  callModule(tab_DT_searchPage_serv, "tab_transf_data_hist", reac_data_train_transf, reactive("val"), tab_with_date=TRUE)
+  callModule(tab_DT_searchPage_serv, "tab_transf_data_hist", reac_data_train_transf, reactive(names(reac_data_train_transf())), tab_with_date=FALSE)
   callModule(fig_ggplot_date_serv, "fig_transf_data_hist", reac_data_train_transf, reactive("val"), reactive(toupper(input$txt_dataId_2_source)))
   callModule(fig_histgram_density_serv, "fig_data_transf_histgram", reac_data_train_transf, "val")
   callModule(fig_acf_pacf_serv, "fig_acf_data_transf", reactive(reac_data_train_transf()$val))
@@ -73,10 +73,24 @@ shinyServer(function(input, output, session) {
   ##############################################################################################END Part C: ARIMA model fit###
   
   
-  ################################################BEGIN Part D: Model Diagnostic #############################################
+  ################################################BEGIN Part D: ARIMA Model Diagnostic #############################################
   output$fig_diag_arima <- renderPlot({
     tsdiag(reac_mod_arima())
   })
   callModule(fig_acf_pacf_serv, "fig_acf_arima_resid", reactive(reac_mod_arima()$residuals), "Residuals")
+  callModule(fig_qq_plot_serv, "fig_qq_plot", reactive(reac_mod_arima()$residuals), "Residual QQ plot")
+  callModule(tab_simple_serv, "tab_stationary_residuals", reactive(TestsStationaryPval(as.numeric(reac_mod_arima()$residuals))))
+  callModule(fig_histgram_density_serv, "fig_histogram_residuals", reactive(data_frame(residuals = reac_mod_arima()$residuals)), "residuals", "Residuals")
+  callModule(fig_acf_pacf_serv, "fig_acf_arima_resid_sqr", reactive(reac_mod_arima()$residuals^2), "Residuals^2 (considering GARCH?)")
   ##############################################################################################END Part D: Model Diagnostic###
+  
+  
+  ################################################BEGIN Part E: ARIMA Model historical fit & forecast #############################################
+  df_mod_fit_transf <- callModule(fig_hist_mod_fit_serv, "fig_hist_mod_fit", reac_data_train_transf, reactive("val"),
+                                  reactive(reac_mod_arima()$residuals), reactive(sqrt(reac_mod_arima()$sigma2)))
+  # callModule(tab_DT_searchPage_serv, "tab_mod_hist_fit", df_mod_fit_transf, reactive(names(df_mod_fit_transf())), tab_with_date=FALSE)
+  ### ARIMA model forecast
+  df_arima_fore_transf <- callModule(df_arima_forecast_serve, "df_arima_fore_transf", reac_mod_arima, reactive(nrow(reac_data_test_transf())))
+  callModule(fig_mod_forecast_serve, "fig_forecast_arima_transf", df_arima_fore_transf, reac_data_test_transf, "ARIMA forecast vs. transformed testing sample")
+  ##############################################################################################END Part E: Model historical fit & forecast ###
 })
